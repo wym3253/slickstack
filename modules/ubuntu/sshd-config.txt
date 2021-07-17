@@ -5,7 +5,7 @@
 #### path: n/a (boilerplate) #######################################################################
 #### destination: /etc/ssh/sshd_config (after install) #############################################
 #### purpose: SSH configuration file boilerplate including settings for jailed SFTP user ###########
-#### module version: Ubuntu 20.04 LTS ##############################################################
+#### module version: OpenSSH 1.1.1f ################################################################
 #### bash aliases: n/a #############################################################################
 ####################################################################################################
 
@@ -24,15 +24,24 @@
 Port @SSH_PORT
 AddressFamily inet
 ListenAddress 0.0.0.0
+# ListenAddress ::
 UseDNS no
+
+####################################################################################################
+#### SSHD_Config: Fingerprint Settings #############################################################
+####################################################################################################
+
+## these are the default fingerprint keys that modern OpenSSH servers recommend using ##
+## generally speaking you should select RSA such as when using a new SSH app ##
+
+HostKey /etc/ssh/ssh_host_rsa_key
+HostKey /etc/ssh/ssh_host_ecdsa_key
+HostKey /etc/ssh/ssh_host_ed25519_key
 
 ####################################################################################################
 #### SSHD_Config: Keying + Cipher Settings #########################################################
 ####################################################################################################
 
-HostKey /etc/ssh/ssh_host_rsa_key
-HostKey /etc/ssh/ssh_host_ecdsa_key
-HostKey /etc/ssh/ssh_host_ed25519_key
 RekeyLimit default none
 
 ####################################################################################################
@@ -43,80 +52,90 @@ SyslogFacility AUTH
 LogLevel INFO
 
 ####################################################################################################
-#### SSHD_Config: User Login + Authentication Settings #############################################
+#### SSHD_Config: Authentication Settings ##########################################################
 ####################################################################################################
 
 ## the root user cannot access SSH after the first ss-install setup process is completed ##
 ## ensure that you remember your sudo user and password (set in your ss-config) ##
 
 AllowUsers @SUDO_USER @SFTP_USER
-AuthorizedKeysFile @PATH_SSH_AUTHORIZED_KEYS_FILE
 PasswordAuthentication @SSH_PASSWORD_AUTHENTICATION
-PubkeyAuthentication @SSH_PUBKEY_AUTHENTICATION
+PubkeyAuthentication yes
+ChallengeResponseAuthentication no ## only for stuff like OTP systems
+PermitRootLogin no ## never
+PermitEmptyPasswords no ## never
+StrictModes yes
+HostbasedAuthentication no ## never
+IgnoreRhosts yes
+IgnoreUserKnownHosts yes
+AuthorizedKeysFile @PATH_SSH_AUTHORIZED_KEYS_FILE
+AuthorizedPrincipalsFile none
+AuthorizedKeysCommand none
+AuthorizedKeysCommandUser nobody
 
-PermitRootLogin no
-PermitEmptyPasswords no
-LoginGraceTime 30s
+####################################################################################################
+#### SSHD_Config: User Session Settings ############################################################
+####################################################################################################
+
+## these are general settings in regard to how user login sessions should be managed ##
+## we hardcode enable PAM because it works fine in nearly all configurations ##
+
+UsePAM yes
+LoginGraceTime 1m
 MaxAuthTries 6
 MaxSessions 10
-ChallengeResponseAuthentication no
-StrictModes yes
-IgnoreUserKnownHosts yes
-IgnoreRhosts yes
-
-#AuthorizedPrincipalsFile none
-#AuthorizedKeysCommand none
-#AuthorizedKeysCommandUser nobody
-HostbasedAuthentication no
+ClientAliveInterval 0
+ClientAliveCountMax 3
+TCPKeepAlive yes
 
 ####################################################################################################
 #### SSHD_Config: Kerberos + GSSAPI Settings #######################################################
 ####################################################################################################
 
-## Kerberos options
-#KerberosAuthentication no
-#KerberosOrLocalPasswd yes
-#KerberosTicketCleanup yes
-#KerberosGetAFSToken no
+# KerberosAuthentication no
+# KerberosOrLocalPasswd yes
+# KerberosTicketCleanup yes
+# KerberosGetAFSToken no
+# KerberosUseKuserok yes
 
-## GSSAPI options
-GSSAPIAuthentication no
-#GSSAPICleanupCredentials yes
-#GSSAPIStrictAcceptorCheck yes
-#GSSAPIKeyExchange no
+# GSSAPIAuthentication yes
+# GSSAPICleanupCredentials no
+# GSSAPIStrictAcceptorCheck yes
+# GSSAPIKeyExchange no
+# GSSAPIEnablek5users no
+
+####################################################################################################
+#### SSHD_Config: Networking Settings ##############################################################
+####################################################################################################
+
+AllowAgentForwarding yes
+AllowTcpForwarding yes ## unfortunately required by CodeGuard (and maybe other apps)
+GatewayPorts no
+X11Forwarding yes
+X11DisplayOffset 10
+X11UseLocalhost yes
+PermitTunnel no
+PermitTTY yes
 
 ####################################################################################################
 #### SSHD_Config: Misc Settings ####################################################################
 ####################################################################################################
 
-UsePAM yes
-
-ClientAliveInterval 0
-ClientAliveCountMax 3
-#TCPKeepAlive yes
-
-#AllowAgentForwarding yes
-AllowTcpForwarding yes ## required for CodeGuard (and maybe other apps)
-GatewayPorts no
-PermitTunnel no
-
-X11Forwarding yes
-#X11DisplayOffset 10
-#X11UseLocalhost yes
-#PermitTTY yes
 PrintMotd no
-#PrintLastLog yes
-#PermitUserEnvironment no
-#Compression delayed
+# PrintLastLog yes
+# PermitUserEnvironment no
+# Compression delayed
+# PidFile /var/run/sshd.pid
+# MaxStartups 10:30:100
+# ChrootDirectory none
+# VersionAddendum none
+# Banner none
 
-#PidFile /var/run/sshd.pid
-#MaxStartups 10:30:100
-
-#ChrootDirectory none
-#VersionAddendum none
-
-Banner none
-AcceptEnv LANG LC_*
+# AcceptEnv LANG LC_*
+# AcceptEnv LANG LC_CTYPE LC_NUMERIC LC_TIME LC_COLLATE LC_MONETARY LC_MESSAGES
+# AcceptEnv LC_PAPER LC_NAME LC_ADDRESS LC_TELEPHONE LC_MEASUREMENT
+# AcceptEnv LC_IDENTIFICATION LC_ALL LANGUAGE
+# AcceptEnv XMODIFIERS
 
 ####################################################################################################
 #### SSHD_Config: Jailed (Chroot) SFTP User Settings ###############################################
@@ -152,5 +171,13 @@ X11Forwarding no
 ## Ref: https://unix.stackexchange.com/questions/406695/how-to-ssh-forwarding-with-allowtcpforwarding-set-to-no
 ## Ref: https://bugs.launchpad.net/ubuntu/+source/openssh/+bug/1873528
 ## Ref: https://serverfault.com/questions/783082/how-to-use-the-ssh-server-with-pam-but-disallow-password-auth
+## Ref: https://superuser.com/questions/161609/can-someone-explain-the-passwordauthentication-in-the-etc-ssh-sshd-config-fil
+## Ref: https://blog.tankywoo.com/2013/09/14/ssh-passwordauthentication-vs-challengeresponseauthentication.html
+## Ref: https://github.com/phusion/baseimage-docker/issues/417
+## Ref: https://secscan.acron.pl/centos7/5/2/7
+## Ref: https://www.ibm.com/docs/kk/was-liberty/zos?topic=system-avoiding-problems-ssh-in-collective
+## Ref: https://unix.stackexchange.com/questions/21130/unable-to-do-paswordless-ssh-even-after-following-standard-procedure
+## Ref: https://linuxliteracy.com/new-way-to-manage-ssh-options-in-ubuntu-20-04/
+## Ref: https://gist.github.com/HacKanCuBa/fe3653d4fe4eed35e41dcc9a380499c2
 
 ## SS_EOF
